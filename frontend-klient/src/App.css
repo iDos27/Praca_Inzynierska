@@ -305,3 +305,67 @@ button:hover {
   background-color: #bdc3c7 !important;
   cursor: not-allowed;
 }
+
+/* Order form styles */
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.8rem;
+  border: 2px solid #ecf0f1;
+  border-radius: 5px;
+  font-size: 1rem;
+  transition: border-color 0.3s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #3498db;
+}
+
+.order-summary {
+  background-color: #ecf0f1;
+  padding: 1rem;
+  border-radius: 5px;
+  margin: 1.5rem 0;
+}
+
+.order-summary p {
+  margin-bottom: 0.5rem;
+}
+
+.form-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.form-buttons button {
+  flex: 1;
+  margin: 0;
+}
+
+.submit-btn {
+  background-color: #27ae60 !important;
+}
+
+.submit-btn:hover {
+  background-color: #219a52 !important;
+}
+
+.order-btn {
+  background-color: #27ae60 !important;
+}
+
+.order-btn:hover {
+  background-color: #219a52 !important;
+}

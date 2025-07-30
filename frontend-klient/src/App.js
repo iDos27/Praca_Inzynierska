@@ -5,6 +5,10 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [cart, setCart] = useState([])
   const [showCart, setShowCart] = useState(false);
+  const [showOrderForm, setShowOrderForm] = useState(false);
+  const [orderData, setOrderData] = useState({
+    tableNumber: ''
+  });
   
   const categories = [
     { id: 1, name: 'Wrapy', emoji: '🌯', description: 'Świeże wrapy z różnymi nadzieniami' },
@@ -15,12 +19,12 @@ function App() {
   const menuItems = {
     1: [
       { id: 1, name: 'Wrap Klasyczny', price: 18, description: 'Kurczak, sałata, pomidor, ogórek, sos czosnkowy' },
-      { id: 2, name: 'Wrap Wege', price: 16, description: 'Hummus, awokado, sałata, pomidor, ogórek, papryka' },
+      { id: 2, name: 'Wrap Wege', price: 16, description: 'Hummus, awokado, sałata, ogórek, papryka' },
       { id: 3, name: 'Wrap Ostry', price: 19, description: 'Kurczak w ostrej marynacie, jalapeno, cebula, sos chipotle' }
     ],
     2: [
       { id: 4, name: 'Burger Klasyczny', price: 22, description: 'Wołowina, sałata, pomidor, cebula, sos burger' },
-      { id: 5, name: 'Burger Wege', price: 20, description: 'Kotlet z quinoa, awokado, sałata, pomidor' }
+      { id: 5, name: 'Burger Wege', price: 20, description: 'Kotlet z quinoa, awokado, sałata+' }
     ],
     3: [
       { id: 6, name: 'Sałatka Cezar', price: 15, description: 'Sałata rzymska, kurczak, parmezan, grzanki' },
@@ -60,6 +64,28 @@ const removeFromCart = (itemId) => {
 const clearCart = () => {
   setCart([]);
 };
+const handleOrderSubmit = (e) => {
+  e.preventDefault();
+
+  if (!orderData.tableNumber) {
+    alert('Proszę podać numer stolika');
+    return;
+  }
+  const order = {
+    items: cart,
+    tableNumber: orderData.tableNumber,
+    total: cart.reduce((total, item) => total + (item.price * item.quantity), 0),
+    timestamp: new Date().toISOString(),
+    status: 'pending'
+  };
+  console.log('Zamówienie do stolika:', order);
+  alert(`Zamówienie do stolika ${orderData.tableNumber} zostało przyjęte.`)
+
+  setCart([]);
+  setOrderData({ tableNumber: '' });
+  setShowOrderForm(false);
+  setShowCart(false);
+}
 
 
   return (
@@ -117,8 +143,46 @@ const clearCart = () => {
               >
                 Wyczyść koszyk
               </button>
+              <button 
+                className='order-btn'
+                onClick={() => setShowOrderForm(true)}
+                disabled={cart.length === 0}
+              >
+                Złóż zamówienie
+              </button>
               <button onClick={() => setShowCart(false)}>Zamknij</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showOrderForm && (
+        <div className='cart-overlay'>
+          <div className='cart-modal'>
+            <h3>Złóż zamówienie</h3>
+            <form onSubmit={handleOrderSubmit}>
+              <div className='form-group'>
+                <label>Numer stolika *</label>
+                <input
+                  type='number'
+                  value={orderData.tableNumber}
+                  onChange={(e) => setOrderData({...orderData, tableNumber: e.target.value})}
+                  placeholder='np. 12'
+                  min='1'
+                  required
+                />
+              </div>
+              
+              <div className='order-summary'>
+                <p>Wartość zamówienia: <strong>{cart.reduce((total, item) => total + (item.price * item.quantity), 0)} zł</strong></p>
+                <p>Liczba pozycji: <strong>{cart.reduce((total, item) => total + item.quantity, 0)}</strong></p>
+              </div>
+              
+              <div className='form-buttons'>
+                <button type='button' onClick={() => setShowOrderForm(false)}>Anuluj</button>
+                <button type='submit' className='submit-btn'>Potwierdź zamówienie</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
