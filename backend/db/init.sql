@@ -25,7 +25,9 @@ CREATE TABLE orders (
     total_amount DECIMAL(10,2) NOT NULL,
     status VARCHAR(50) DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    order_type  VARCHAR(10) DEFAULT 'table',
+    order_number INTEGER
 );
 
 -- Tabela pozycji w zamówieniu

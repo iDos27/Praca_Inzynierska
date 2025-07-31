@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { apiService } from './api';
 import './App.css';
 
 function App() {
@@ -7,29 +8,49 @@ function App() {
   const [showCart, setShowCart] = useState(false);
   const [showOrderForm, setShowOrderForm] = useState(false);
   const [orderData, setOrderData] = useState({
+    orderType: 'table',
     tableNumber: ''
   });
+
+  const [categories, setCategories] = useState([]);
+  const [menuItems, setMenuItems] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
-  const categories = [
-    { id: 1, name: 'Wrapy', emoji: '🌯', description: 'Świeże wrapy z różnymi nadzieniami' },
-    { id: 2, name: 'Burgery', emoji: '🍔', description: 'Socziste burgery na każdy gust' },
-    { id: 3, name: 'Sałatki', emoji: '🥗', description: 'Zdrowe i świeże sałatki' }
-  ];
-  
-  const menuItems = {
-    1: [
-      { id: 1, name: 'Wrap Klasyczny', price: 18, description: 'Kurczak, sałata, pomidor, ogórek, sos czosnkowy' },
-      { id: 2, name: 'Wrap Wege', price: 16, description: 'Hummus, awokado, sałata, ogórek, papryka' },
-      { id: 3, name: 'Wrap Ostry', price: 19, description: 'Kurczak w ostrej marynacie, jalapeno, cebula, sos chipotle' }
-    ],
-    2: [
-      { id: 4, name: 'Burger Klasyczny', price: 22, description: 'Wołowina, sałata, pomidor, cebula, sos burger' },
-      { id: 5, name: 'Burger Wege', price: 20, description: 'Kotlet z quinoa, awokado, sałata+' }
-    ],
-    3: [
-      { id: 6, name: 'Sałatka Cezar', price: 15, description: 'Sałata rzymska, kurczak, parmezan, grzanki' },
-      { id: 7, name: 'Sałatka Grecka', price: 14, description: 'Pomidory, ogórki, oliwki, feta, czerwona cebula' }
-    ]
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      setLoading(true);
+      const response = await apiService.getCategories();
+      setCategories(response.data);
+    } catch (err) {
+      setError('Błąd pobierania kategorii');
+      console.error('Error fetching categories:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const fetchMenuItems = async (categoryId) => {
+    try {
+      const response = await apiService.getMenuItems(categoryId);
+      setMenuItems(prev => ({
+        ...prev,
+        [categoryId]: response.data
+      }));
+    } catch (err) {
+      setError('Błąd pobierania menu');
+      console.error('Error fetching menu items:', err);
+    }
+  };
+
+  const handleCategorySelect = (categoryId) => {
+    setSelectedCategory(categoryId);
+    if (!menuItems[categoryId]) {
+      fetchMenuItems(categoryId);
+    }
   };
 
   const addToCart = (item) => {
@@ -47,45 +68,58 @@ function App() {
       }
     });
   };
-const removeFromCart = (itemId) => {
-  setCart(prevCart => {
-    return prevCart.map(cartItem => {
-      if (cartItem.id === itemId) {
-        if (cartItem.quantity > 1) {
-          return { ...cartItem, quantity: cartItem.quantity - 1 };
-        } else {
-          return null;
+  const removeFromCart = (itemId) => {
+    setCart(prevCart => {
+      return prevCart.map(cartItem => {
+        if (cartItem.id === itemId) {
+          if (cartItem.quantity > 1) {
+            return { ...cartItem, quantity: cartItem.quantity - 1 };
+          } else {
+            return null;
+          }
         }
-      }
-      return cartItem;
-    }).filter(item => item !== null);
-  });
-};
-const clearCart = () => {
-  setCart([]);
-};
-const handleOrderSubmit = (e) => {
-  e.preventDefault();
-
-  if (!orderData.tableNumber) {
-    alert('Proszę podać numer stolika');
-    return;
-  }
-  const order = {
-    items: cart,
-    tableNumber: orderData.tableNumber,
-    total: cart.reduce((total, item) => total + (item.price * item.quantity), 0),
-    timestamp: new Date().toISOString(),
-    status: 'pending'
+        return cartItem;
+      }).filter(item => item !== null);
+    });
   };
-  console.log('Zamówienie do stolika:', order);
-  alert(`Zamówienie do stolika ${orderData.tableNumber} zostało przyjęte.`)
+  const clearCart = () => {
+    setCart([]);
+  };
+  const handleOrderSubmit = async (e) => {
+    e.preventDefault();
 
-  setCart([]);
-  setOrderData({ tableNumber: '' });
-  setShowOrderForm(false);
-  setShowCart(false);
-}
+    if (orderData.orderType === 'table' && !orderData.tableNumber) {
+      alert('Proszę podać numer stolika');
+      return;
+    }
+
+    const orderPayload = {
+      order_type: orderData.orderType,
+      table_number: orderData.orderType === 'table' ? orderData.tableNumber : '',
+      items: cart.map(item => ({
+        id: item.id,
+        quantity: item.quantity
+      }))
+    };
+
+    try {
+      const response = await apiService.createOrder(orderPayload);
+
+      if (orderData.orderType === 'pickup') {
+        alert(`Zamówienie przyjęte! Twój numer: ${response.data.order_number}. Poczekaj na wywołanie.`);
+      } else {
+        alert(`Zamówienie do stolika ${orderData.tableNumber} zostało przyjęte!`);
+      }
+
+      setCart([]);
+      setOrderData({ orderType: 'table', tableNumber: '' });
+      setShowOrderForm(false);
+      setShowCart(false);
+    } catch (err) {
+      alert('Błąd przy składaniu zamówienia');
+      console.error('Error creating order:', err);
+    }
+  };
 
 
   return (
@@ -162,16 +196,44 @@ const handleOrderSubmit = (e) => {
             <h3>Złóż zamówienie</h3>
             <form onSubmit={handleOrderSubmit}>
               <div className='form-group'>
-                <label>Numer stolika *</label>
-                <input
-                  type='number'
-                  value={orderData.tableNumber}
-                  onChange={(e) => setOrderData({...orderData, tableNumber: e.target.value})}
-                  placeholder='np. 12'
-                  min='1'
-                  required
-                />
+                <label>Typ zamówienia *</label>
+                <div className='radio-group'>
+                  <label>
+                    <input
+                      type='radio'
+                      name='orderType'
+                      value='table'
+                      checked={orderData.orderType === 'table'}
+                      onChange={(e) => setOrderData({...orderData, orderType: e.target.value})}
+                    />
+                    Dostawa do stolika
+                  </label>
+                  <label>
+                    <input
+                      type='radio'
+                      name='orderType'
+                      value='pickup'
+                      checked={orderData.orderType === 'pickup'}
+                      onChange={(e) => setOrderData({...orderData, orderType: e.target.value, tableNumber: ''})}
+                    />
+                    Odbiór przy ladzie
+                  </label>
+                </div>
               </div>
+
+              {orderData.orderType === 'table' && (
+                <div className='form-group'>
+                  <label>Numer stolika *</label>
+                  <input
+                    type='number'
+                    value={orderData.tableNumber}
+                    onChange={(e) => setOrderData({...orderData, tableNumber: e.target.value})}
+                    placeholder='np. 12'
+                    min='1'
+                    required
+                  />
+                </div>
+              )}
               
               <div className='order-summary'>
                 <p>Wartość zamówienia: <strong>{cart.reduce((total, item) => total + (item.price * item.quantity), 0)} zł</strong></p>
@@ -186,7 +248,9 @@ const handleOrderSubmit = (e) => {
           </div>
         </div>
       )}
-
+      
+      {loading && <div className="loading">Ładowanie...</div>}
+      {error && <div className="error">{error}</div>}
 
       <main className='main-content'>
         {!selectedCategory ? (
@@ -197,7 +261,7 @@ const handleOrderSubmit = (e) => {
                 <div
                   key={category.id}
                   className='category-card'
-                  onClick={() => setSelectedCategory(category.id)}
+                  onClick={() => handleCategorySelect(category.id)}
                 >
                   <h3>{category.emoji} {category.name}</h3>
                   <p>{category.description}</p>

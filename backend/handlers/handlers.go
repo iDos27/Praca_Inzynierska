@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"restaurant-backend/database"
 	"restaurant-backend/models"
@@ -85,14 +86,70 @@ func GetAllMenuItems(c *gin.Context) {
 }
 
 func CreateOrder(c *gin.Context) {
-	var request models.CreateOrderRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nieprawidłowe żądanie"})
+	fmt.Printf("DEBUG: CreateOrder została wywołana\n")
+
+	var req models.CreateOrderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Printf("DEBUG: Błąd parsowania JSON: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Nieprawidłowe dane"})
 		return
 	}
+
+	fmt.Printf("DEBUG: Otrzymane dane: %+v\n", req)
+
+	if req.OrderType != "table" && req.OrderType != "pickup" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nieprawidłowy typ zamówienia"})
+		return
+	}
+
+	if req.OrderType == "table" && req.TableNumber == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Numer stolika jest wymagany"})
+		return
+	}
+
+	// Generuj numer zamówienia w przedziale 1-99 (cyklicznie) PRZED transakcją
+	// Znajdź najnowszy rekord i jego order_number
+	var orderNumber int
+	err := database.DB.QueryRow("SELECT COALESCE(order_number, 0) FROM orders ORDER BY id DESC LIMIT 1").Scan(&orderNumber)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			// Tabela jest pusta, zacznij od 0 (będzie inkrementowane do 1)
+			orderNumber = 0
+			fmt.Printf("DEBUG: Tabela orders jest pusta, zaczynam od 0\n")
+		} else {
+			fmt.Printf("DEBUG: Błąd przy pobieraniu order_number: %v\n", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd generowania numeru"})
+			return
+		}
+	} else {
+		fmt.Printf("DEBUG: Zapytanie przeszło pomyślnie\n")
+	}
+
+	// DEBUG: sprawdź co zwraca MAX i kilka ostatnich rekordów
+	fmt.Printf("DEBUG: MAX order_number z bazy: %d\n", orderNumber)
+
+	// Sprawdź ostatnie 3 rekordy
+	rows, _ := database.DB.Query("SELECT id, order_number FROM orders ORDER BY id DESC LIMIT 3")
+	defer rows.Close()
+	fmt.Printf("DEBUG: Ostatnie 3 rekordy w bazie:\n")
+	for rows.Next() {
+		var id, num int
+		rows.Scan(&id, &num)
+		fmt.Printf("  ID: %d, order_number: %d\n", id, num)
+	}
+
+	// Następny numer w cyklu 0-99
+	orderNumber++
+	if orderNumber > 99 {
+		orderNumber = 0
+	}
+
+	// DEBUG: sprawdź jaki numer będziemy zapisywać
+	fmt.Printf("DEBUG: Nowy order_number do zapisania: %d\n", orderNumber)
+
 	tx, err := database.DB.Begin()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd Rozpoczynania transakcji"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd rozpoczynania transakcji"})
 		return
 	}
 	defer tx.Rollback()
@@ -100,7 +157,7 @@ func CreateOrder(c *gin.Context) {
 	var orderID int
 	var totalAmount float64
 
-	for _, item := range request.Items {
+	for _, item := range req.Items {
 		var price float64
 		err := tx.QueryRow("SELECT price FROM menu_items WHERE id = $1", item.ID).Scan(&price)
 		if err != nil {
@@ -111,16 +168,16 @@ func CreateOrder(c *gin.Context) {
 	}
 
 	err = tx.QueryRow(`
-		INSERT INTO orders (table_number, total_amount, status, created_at, updated_at)
-		VALUES ($1, $2, 'pending', NOW(), NOW())
+		INSERT INTO orders (order_type, table_number, order_number, total_amount, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, 'pending', NOW(), NOW())
 		RETURNING id`,
-		request.TableNumber, totalAmount).Scan(&orderID)
+		req.OrderType, req.TableNumber, orderNumber, totalAmount).Scan(&orderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd tworzenia zamówienia"})
 		return
 	}
 
-	for _, item := range request.Items {
+	for _, item := range req.Items {
 		var price float64
 		err := tx.QueryRow("SELECT price FROM menu_items WHERE id = $1", item.ID).Scan(&price)
 		if err != nil {
@@ -143,16 +200,22 @@ func CreateOrder(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"message":  "Zamówienie zostało utworzone",
-		"order_id": orderID,
-		"total":    totalAmount,
-	})
+	// DEBUG: Pokaż utworzone zamówienie
+	fmt.Printf("DEBUG: Utworzono zamówienie - ID: %d, Numer: %d\n", orderID, orderNumber)
+
+	response := gin.H{
+		"message":      "Zamówienie zostało utworzone",
+		"order_id":     orderID,
+		"total":        totalAmount,
+		"order_number": orderNumber,
+	}
+
+	c.JSON(http.StatusCreated, response)
 }
 
 func GetOrders(c *gin.Context) {
 	rows, err := database.DB.Query(`
-        SELECT id, table_number, total_amount, status, created_at, updated_at 
+        SELECT id, order_type, table_number, order_number, total_amount, status, created_at, updated_at 
         FROM orders 
         ORDER BY created_at DESC`)
 	if err != nil {
@@ -164,7 +227,7 @@ func GetOrders(c *gin.Context) {
 	var orders []models.Order
 	for rows.Next() {
 		var order models.Order
-		err := rows.Scan(&order.ID, &order.TableNumber, &order.TotalAmount, &order.Status, &order.CreatedAt, &order.UpdatedAt)
+		err := rows.Scan(&order.ID, &order.OrderType, &order.TableNumber, &order.OrderNumber, &order.TotalAmount, &order.Status, &order.CreatedAt, &order.UpdatedAt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Błąd skanowania zamówień"})
 			return

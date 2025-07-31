@@ -22,7 +22,9 @@ type MenuItem struct {
 
 type Order struct {
 	ID          int         `json:"id"`
+	OrderType   string      `json:"order_type"`
 	TableNumber string      `json:"table_number"`
+	OrderNumber int         `json:"order_number"`
 	TotalAmount float64     `json:"total_amount"`
 	Status      string      `json:"status"`
 	CreatedAt   time.Time   `json:"created_at"`
@@ -41,6 +43,7 @@ type OrderItem struct {
 }
 
 type CreateOrderRequest struct {
+	OrderType   string `json:"order_type"`
 	TableNumber string `json:"table_number"`
 	Items       []struct {
 		ID       int `json:"id"`
